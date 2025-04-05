@@ -11,11 +11,13 @@ A multiplayer chess game built with Python and Pygame, featuring online gameplay
 - Game state synchronization between players
 - Proper handling of chess rules including valid moves
 - Visual feedback for selected pieces and valid moves
+- Support for multiple clients on different devices
 
 ## Project Structure
 
 - `client.py` - Main client application with UI and network logic
 - `server_test.py` - Test server for handling client connections
+- `run_server.py` - Helper script to run the server with network information
 - `chess_logic.py` - Implementation of chess rules and game state
 - `gui/` - GUI components:
   - `board.py` - Chess board representation
@@ -30,6 +32,7 @@ A multiplayer chess game built with Python and Pygame, featuring online gameplay
 - Pygame
 - Socket library (standard)
 - JSON library (standard)
+- argparse library (standard)
 
 ## Installation
 
@@ -45,19 +48,49 @@ pip install -r requirements.txt
 
 ## Usage
 
-1. Start the server:
+### Running the Server
+
+Run the server using the helper script:
 ```
-python server_test.py
+python run_server.py
 ```
 
-2. Run the client (in a separate terminal):
+This will:
+- Start the server on port 5555
+- Display your local network IP address
+- Show instructions for clients to connect
+
+### Client Connection Options
+
+1. **Connect from the same computer**:
 ```
 python client.py
 ```
+(Uses localhost by default)
 
-3. Enter a username and click "Connect"
-4. Click "FIND GAME" to start matchmaking
-5. Play chess against your opponent!
+2. **Connect from another device on the same network**:
+```
+python client.py --host <SERVER_LOCAL_IP>
+```
+(Use the Local Network IP displayed when starting the server)
+
+3. **Connect from outside the network** (requires port forwarding):
+```
+python client.py --host <SERVER_PUBLIC_IP>
+```
+
+### Playing the Game
+
+1. Enter a username and click "Connect"
+2. Click "FIND GAME" to start matchmaking
+3. Play chess against your opponent!
+
+## Network Configuration
+
+For clients to connect from outside your local network:
+1. Set up port forwarding on your router to forward port 5555 to your server computer
+2. Clients will use your public IP address to connect
+3. Some networks may block connections - try using a mobile hotspot if you encounter issues
 
 ## Network Protocol
 

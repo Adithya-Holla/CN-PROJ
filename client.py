@@ -6,10 +6,19 @@ import sys
 import time
 import traceback
 import math
+import argparse
 from gui.board import ChessBoard
 from gui.menu import Menu
 from gui.chat import ChatPanel
 from gui.utils import Button, TextBox, draw_text
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description='Chess game client')
+    parser.add_argument('--host', default='localhost', 
+                        help='Server hostname or IP address (default: localhost)')
+    parser.add_argument('--port', type=int, default=5555, 
+                        help='Server port (default: 5555)')
+    return parser.parse_args()
 
 class ChessClient:
     def __init__(self, host='localhost', port=5555):
@@ -19,7 +28,7 @@ class ChessClient:
         # Set up display
         self.width, self.height = 1000, 700
         self.screen = pygame.display.set_mode((self.width, self.height))
-        pygame.display.set_caption("Chess Game")
+        pygame.display.set_caption(f"Chess Game - Server: {host}:{port}")
         
         # Load assets
         self.font = pygame.font.SysFont('Arial', 20)
@@ -94,6 +103,7 @@ class ChessClient:
             self.socket.connect((self.host, self.port))
             self.socket.settimeout(None)  # Remove timeout for normal operation
             self.username = username
+        
             
             # Send username to server
             print(f"Sending username: {username}")
@@ -848,5 +858,6 @@ class ChessClient:
 
 
 if __name__ == "__main__":
-    client = ChessClient()
+    args = parse_arguments()
+    client = ChessClient(args.host, args.port)
     client.run() 

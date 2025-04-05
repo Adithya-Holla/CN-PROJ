@@ -319,14 +319,21 @@ def handle_client(client_socket, addr):
         
         print(f"Client {username} from {addr} disconnected")
 
-def start_test_server(host='0.0.0.0', port=5555):
+def start_test_server(host='', port=5555):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
     try:
         server.bind((host, port))
         server.listen(5)
-        print(f"Test server started on {host}:{port}")
+        
+        # Print local IP address for clients to connect to
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        print(f"Server started on port {port}")
+        print(f"Connect to this server using:")
+        print(f"Local network IP: {local_ip}, Port: {port}")
+        print("Other clients can connect by using this IP address in their client.py")
         
         while True:
             try:
