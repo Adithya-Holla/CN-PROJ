@@ -50,33 +50,65 @@ pip install -r requirements.txt
 
 ### Running the Server
 
-Run the server using the helper script:
+You have two server options:
+
+### Option 1: Main Server (Recommended)
+
+#### Windows
+Run the `start_main_server.bat` file by double-clicking it.
+
+#### Linux/Mac
+1. Make the script executable:
+   ```
+   chmod +x start_main_server.sh
+   ```
+2. Run the script:
+   ```
+   ./start_main_server.sh
+   ```
+
+#### Manual Start
+You can also start the server directly with Python:
 ```
-python run_server.py
+python server.py
 ```
 
-This will:
-- Start the server on port 5555
-- Display your local network IP address
-- Show instructions for clients to connect
+### Option 2: Test Server
+
+#### Windows
+Run the `start_server.bat` file by double-clicking it.
+
+#### Linux/Mac
+1. Make the script executable:
+   ```
+   chmod +x start_server.sh
+   ```
+2. Run the script:
+   ```
+   ./start_server.sh
+   ```
+
+#### Manual Start
+You can also start the test server directly with Python:
+```
+python server_test.py
+```
 
 ### Client Connection Options
 
 1. **Connect from the same computer**:
 ```
-python client.py
+python client.py --host localhost --port 5555
 ```
-(Uses localhost by default)
 
 2. **Connect from another device on the same network**:
 ```
-python client.py --host <SERVER_LOCAL_IP>
+python client.py --host [SERVER_LOCAL_IP] --port 5555
 ```
-(Use the Local Network IP displayed when starting the server)
 
 3. **Connect from outside the network** (requires port forwarding):
 ```
-python client.py --host <SERVER_PUBLIC_IP>
+python client.py --host [SERVER_PUBLIC_IP] --port 5555
 ```
 
 ### Playing the Game
@@ -112,4 +144,78 @@ The game uses a JSON-based protocol for communication between client and server:
 
 ## License
 
-This project is created as part of a computer networks course assignment. 
+This project is created as part of a computer networks course assignment.
+
+# Chess Online Server
+
+## Starting the Server
+
+You have two server options:
+
+### Option 1: Main Server (Recommended)
+
+#### Windows
+Run the `start_main_server.bat` file by double-clicking it.
+
+#### Linux/Mac
+1. Make the script executable:
+   ```
+   chmod +x start_main_server.sh
+   ```
+2. Run the script:
+   ```
+   ./start_main_server.sh
+   ```
+
+#### Manual Start
+You can also start the server directly with Python:
+```
+python server.py
+```
+
+### Option 2: Test Server
+
+#### Windows
+Run the `start_server.bat` file by double-clicking it.
+
+#### Linux/Mac
+1. Make the script executable:
+   ```
+   chmod +x start_server.sh
+   ```
+2. Run the script:
+   ```
+   ./start_server.sh
+   ```
+
+#### Manual Start
+You can also start the test server directly with Python:
+```
+python server_test.py
+```
+
+## Connecting Clients
+
+Clients can connect to the server using:
+
+1. **From the same computer**: 
+   ```
+   python client.py --host localhost --port 5555
+   ```
+
+2. **From another device on the same network**:
+   ```
+   python client.py --host [SERVER_LOCAL_IP] --port 5555
+   ```
+   The server's local IP will be shown when you start the server.
+
+3. **From the internet** (requires port forwarding on your router):
+   ```
+   python client.py --host [SERVER_PUBLIC_IP] --port 5555
+   ```
+
+## Important Notes
+
+- The server now listens on all network interfaces (`0.0.0.0`), allowing connections from any device
+- To allow connections from the internet, you need to set up port forwarding on your router for port 5555
+- Press Ctrl+C to stop the server 

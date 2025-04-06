@@ -230,6 +230,7 @@ class ChessClient:
             self.handle_message(message)
                 
         # Force redraw after processing messages
+        self.draw()
         pygame.display.flip()
     
     def handle_message(self, message):
@@ -253,14 +254,23 @@ class ChessClient:
             self.opponent_name = message.get('opponent')
             self.in_game = True
             
+            # Update menu status first for visual feedback
+            self.menu.set_status(f"Game found! Playing as {self.player_color} vs {self.opponent_name}")
+            
             # Force transition to game screen
             print(f"Changing screen from '{self.current_screen}' to 'game'")
             self.current_screen = 'game'
+            
+            # Post an event to ensure UI updates immediately
             pygame.event.post(pygame.event.Event(pygame.USEREVENT, {'subtype': 'screen_change'}))
             
             self.is_my_turn = self.player_color == 'white'  # White goes first
             print(f"Game started: playing as {self.player_color} against {self.opponent_name}")
             print(f"Current screen is now: {self.current_screen}")
+            
+            # Force redraw to update the screen immediately
+            self.draw()
+            pygame.display.flip()
         
         elif message_type == 'board_state':
             print(f"BOARD STATE RECEIVED: {message}")
@@ -268,9 +278,16 @@ class ChessClient:
             if board_data:
                 self.board.update_board(board_data)
                 self.is_my_turn = message.get('turn') == self.player_color
-                print(f"Received board state. It's {'your' if self.is_my_turn else 'opponent\'s'} turn.")
+                turn = "your" if self.is_my_turn else "opponent's"
+                print(f"Received board state. It's {turn} turn.")
             else:
                 print("Warning: Received empty board state")
+            
+            # Ensure we're in game screen when receiving board state
+            if self.current_screen != 'game' and self.in_game:
+                print("Forcing transition to game screen after receiving board state")
+                self.current_screen = 'game'
+                pygame.event.post(pygame.event.Event(pygame.USEREVENT, {'subtype': 'screen_change'}))
         
         elif message_type == 'move_result':
             if message.get('valid'):

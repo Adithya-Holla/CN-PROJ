@@ -12,6 +12,119 @@ player_lock = threading.Lock()
 # Connected clients
 clients = {}
 
+def handle_find_game_request(username, client_socket):
+    """Handle find_game request in a more reliable way"""
+    print(f"Received find_game request from {username}")
+    
+    # Send queue message
+    queue_msg = {'type': 'queue', 'message': 'Looking for opponent...'}
+    queue_data = json.dumps(queue_msg).encode('utf-8')
+    client_socket.send(queue_data)
+    print(f"Sent queue message to {username}")
+    
+    # Check if there's a waiting player
+    matched_player = None
+    matched_socket = None
+    
+    # Try to get a waiting player
+    if not waiting_players.empty():
+        with player_lock:
+            try:
+                matched_player = waiting_players.get_nowait()
+                # Verify this player is still connected and waiting
+                if matched_player in clients and not clients[matched_player]['in_game']:
+                    matched_socket = clients[matched_player]['socket']
+                else:
+                    matched_player = None
+            except queue.Empty:
+                matched_player = None
+    
+    if matched_player and matched_socket:
+        # We found a match!
+        print(f"Matched {username} with {matched_player}")
+        
+        # Mark both players as in a game
+        with player_lock:
+            clients[username]['in_game'] = True
+            clients[matched_player]['in_game'] = True
+            clients[username]['opponent'] = matched_player
+            clients[matched_player]['opponent'] = username
+            
+            # Assign colors - matched player (who was waiting) is white
+            player_color = 'black'
+            opponent_color = 'white'
+            
+            # Store colors in client data
+            clients[username]['color'] = player_color
+            clients[matched_player]['color'] = opponent_color
+        
+        # Create initial board state
+        board_state = [[None for _ in range(8)] for _ in range(8)]
+        
+        # Add some test pieces
+        board_state[0][0] = {'color': 'black', 'type': 'rook', 'has_moved': False}
+        board_state[0][4] = {'color': 'black', 'type': 'king', 'has_moved': False}
+        board_state[7][0] = {'color': 'white', 'type': 'rook', 'has_moved': False}
+        board_state[7][4] = {'color': 'white', 'type': 'king', 'has_moved': False}
+        
+        # Send game_start messages first
+        try:
+            # Send game_start to the current player (black)
+            game_start_msg = {
+                'type': 'game_start',
+                'color': player_color,
+                'opponent': matched_player
+            }
+            game_start_data = json.dumps(game_start_msg).encode('utf-8')
+            client_socket.send(game_start_data)
+            print(f"Sent game_start message to {username} (black)")
+            
+            # Send game_start to the opponent (white)
+            opponent_game_start_msg = {
+                'type': 'game_start',
+                'color': opponent_color,
+                'opponent': username
+            }
+            matched_socket.send(json.dumps(opponent_game_start_msg).encode('utf-8'))
+            print(f"Sent game_start message to {matched_player} (white)")
+            
+            # Small delay to ensure game_start messages are processed first
+            time.sleep(0.1)
+            
+            # Send board state to both players
+            board_msg = {
+                'type': 'board_state',
+                'board': board_state,
+                'turn': 'white'
+            }
+            board_data = json.dumps(board_msg).encode('utf-8')
+            
+            client_socket.send(board_data)
+            print(f"Sent board_state message to {username}")
+            
+            matched_socket.send(board_data)
+            print(f"Sent board_state message to {matched_player}")
+            
+            return True
+        except Exception as e:
+            print(f"Error during matchmaking: {e}")
+            # Reset game state if there was an error
+            with player_lock:
+                clients[username]['in_game'] = False
+                clients[username]['opponent'] = None
+                clients[matched_player]['in_game'] = False
+                clients[matched_player]['opponent'] = None
+            return False
+    else:
+        # No match found, add to waiting queue
+        print(f"Adding {username} to waiting queue")
+        waiting_players.put(username)
+        
+        # Send updated queue message
+        queue_update_msg = {'type': 'queue', 'message': 'Waiting for opponent...'}
+        client_socket.send(json.dumps(queue_update_msg).encode('utf-8'))
+        return False
+
 def handle_client(client_socket, addr):
     username = "Unknown"
     game_started = False
@@ -67,116 +180,7 @@ def handle_client(client_socket, addr):
                     
                     # Handle find_game request
                     if msg_type == 'find_game' and not game_started:
-                        print(f"Received find_game request from {username}")
-                        
-                        # Send queue message
-                        queue_msg = {'type': 'queue', 'message': 'Looking for opponent...'}
-                        queue_data = json.dumps(queue_msg).encode('utf-8')
-                        client_socket.send(queue_data)
-                        print(f"Sent queue message to {username}")
-                        
-                        # Check if there's a waiting player
-                        matched_player = None
-                        
-                        # Try to get a waiting player
-                        if not waiting_players.empty():
-                            with player_lock:
-                                try:
-                                    matched_player = waiting_players.get_nowait()
-                                    # Verify this player is still connected and waiting
-                                    if matched_player not in clients or clients[matched_player]['in_game']:
-                                        matched_player = None
-                                except queue.Empty:
-                                    matched_player = None
-                        
-                        if matched_player:
-                            # We found a match!
-                            print(f"Matched {username} with {matched_player}")
-                            
-                            # Get the opponent's socket
-                            with player_lock:
-                                if matched_player in clients:
-                                    opponent_socket = clients[matched_player]['socket']
-                                    # Mark both players as in a game
-                                    clients[username]['in_game'] = True
-                                    clients[matched_player]['in_game'] = True
-                                    clients[username]['opponent'] = matched_player
-                                    clients[matched_player]['opponent'] = username
-                                    
-                                    # Assign colors - matched player (who was waiting) is white
-                                    player_color = 'black'
-                                    opponent_color = 'white'
-                                    
-                                    # Store colors in client data
-                                    clients[username]['color'] = player_color
-                                    clients[matched_player]['color'] = opponent_color
-                                else:
-                                    # Opponent disconnected while matchmaking
-                                    print(f"Opponent {matched_player} disconnected during matchmaking")
-                                    matched_player = None
-                            
-                            if matched_player and opponent_socket:
-                                # Start game for both players
-                                
-                                # Send game_start to the current player (black)
-                                game_start_msg = {
-                                    'type': 'game_start',
-                                    'color': player_color,
-                                    'opponent': matched_player
-                                }
-                                game_start_data = json.dumps(game_start_msg).encode('utf-8')
-                                client_socket.send(game_start_data)
-                                print(f"Sent game_start message to {username} (black)")
-                                
-                                # Send game_start to the opponent (white)
-                                opponent_game_start_msg = {
-                                    'type': 'game_start',
-                                    'color': opponent_color,
-                                    'opponent': username
-                                }
-                                opponent_socket.send(json.dumps(opponent_game_start_msg).encode('utf-8'))
-                                print(f"Sent game_start message to {matched_player} (white)")
-                                
-                                # Create initial board state
-                                board_state = [[None for _ in range(8)] for _ in range(8)]
-                                
-                                # Add some test pieces
-                                board_state[0][0] = {'color': 'black', 'type': 'rook', 'has_moved': False}
-                                board_state[0][4] = {'color': 'black', 'type': 'king', 'has_moved': False}
-                                board_state[7][0] = {'color': 'white', 'type': 'rook', 'has_moved': False}
-                                board_state[7][4] = {'color': 'white', 'type': 'king', 'has_moved': False}
-                                
-                                # Send board state to both players
-                                board_msg = {
-                                    'type': 'board_state',
-                                    'board': board_state,
-                                    'turn': 'white'
-                                }
-                                board_data = json.dumps(board_msg).encode('utf-8')
-                                
-                                client_socket.send(board_data)
-                                print(f"Sent board_state message to {username}")
-                                
-                                opponent_socket.send(board_data)
-                                print(f"Sent board_state message to {matched_player}")
-                                
-                                game_started = True
-                            else:
-                                # Add back to queue if matching failed
-                                waiting_players.put(username)
-                                error_msg = {
-                                    'type': 'error',
-                                    'message': 'Opponent disconnected during matchmaking, trying again...'
-                                }
-                                client_socket.send(json.dumps(error_msg).encode('utf-8'))
-                        else:
-                            # No match found, add to waiting queue
-                            print(f"Adding {username} to waiting queue")
-                            waiting_players.put(username)
-                            
-                            # Send updated queue message
-                            queue_update_msg = {'type': 'queue', 'message': 'Waiting for opponent...'}
-                            client_socket.send(json.dumps(queue_update_msg).encode('utf-8'))
+                        game_started = handle_find_game_request(username, client_socket)
                     
                     # Handle chat messages
                     elif message.get('type') == 'chat' and game_started:
@@ -319,7 +323,7 @@ def handle_client(client_socket, addr):
         
         print(f"Client {username} from {addr} disconnected")
 
-def start_test_server(host='', port=5555):
+def start_test_server(host='0.0.0.0', port=5555):
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     
@@ -331,9 +335,12 @@ def start_test_server(host='', port=5555):
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
         print(f"Server started on port {port}")
+        print(f"Server is listening on all network interfaces (0.0.0.0)")
         print(f"Connect to this server using:")
-        print(f"Local network IP: {local_ip}, Port: {port}")
-        print("Other clients can connect by using this IP address in their client.py")
+        print(f"- From this computer: localhost or 127.0.0.1, Port: {port}")
+        print(f"- From local network: {local_ip}, Port: {port}")
+        print(f"- From outside network: [Your public IP], Port: {port} (requires port forwarding)")
+        print("Other clients can connect by using the appropriate IP address in their client.py")
         
         while True:
             try:
@@ -352,5 +359,6 @@ def start_test_server(host='', port=5555):
         server.close()
 
 if __name__ == "__main__":
-    print("Starting test chess server...")
+    print("Starting chess server...")
+    print("Press Ctrl+C to stop the server")
     start_test_server() 

@@ -19,7 +19,33 @@ class ChessServer:
     def start(self):
         self.server_socket.bind((self.host, self.port))
         self.server_socket.listen(5)
-        print(f"Server started on {self.host}:{self.port}")
+        
+        # Get and display IP addresses for connection
+        hostname = socket.gethostname()
+        local_ip = socket.gethostbyname(hostname)
+        
+        try:
+            # Get the public IP (this requires internet access)
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            public_ip = s.getsockname()[0]
+            s.close()
+        except:
+            public_ip = "Could not determine (check internet connection)"
+        
+        print("=" * 50)
+        print("  CHESS ONLINE SERVER")
+        print("=" * 50)
+        print(f"\nServer started on port {self.port}")
+        print(f"Server is listening on all network interfaces (0.0.0.0)")
+        print("\nIP Addresses for clients to connect to:")
+        print(f"  • Local (same computer): 127.0.0.1 or localhost")
+        print(f"  • Local network (LAN): {local_ip}")
+        print(f"  • Public (requires port forwarding): {public_ip}")
+        print("\nClient connection instructions:")
+        print(f"  python client.py --host <IP_ADDRESS> --port {self.port}")
+        print("\nPress Ctrl+C to stop the server")
+        print("=" * 50)
         
         try:
             while True:
@@ -81,66 +107,102 @@ class ChessServer:
             if self.clients[client_socket]['game'] is None and client_socket not in self.waiting_queue:
                 self.waiting_queue.append(client_socket)
                 self.send_message(client_socket, {'type': 'queue', 'message': 'Looking for opponent...'})
+                print(f"Added client {self.clients[client_socket]['username']} to waiting queue")
                 
                 # Check if we can match two players
                 if len(self.waiting_queue) >= 2:
-                    self.match_players()
+                    # Use a separate thread for matchmaking to avoid blocking
+                    match_thread = threading.Thread(target=self.match_players)
+                    match_thread.daemon = True
+                    match_thread.start()
+                    print("Started matchmaking thread")
     
     def match_players(self):
-        # Get two clients from the waiting queue
-        client1 = self.waiting_queue.pop(0)
-        client2 = self.waiting_queue.pop(0)
+        with self.lock:
+            # Verify we have at least 2 players
+            if len(self.waiting_queue) < 2:
+                print("Not enough players in queue for matchmaking")
+                return
+            
+            # Get two clients from the waiting queue
+            client1 = self.waiting_queue.pop(0)
+            client2 = self.waiting_queue.pop(0)
+            
+            print(f"Matching players: {self.clients[client1]['username']} and {self.clients[client2]['username']}")
+            
+            # Create a unique game ID
+            game_id = str(random.randint(1000, 9999))
+            
+            # Create a new chess game
+            game = ChessGame()
+            
+            # Randomly assign colors
+            colors = ['white', 'black']
+            random.shuffle(colors)
+            
+            # Update client information
+            self.clients[client1]['game'] = game_id
+            self.clients[client1]['color'] = colors[0]
+            self.clients[client2]['game'] = game_id
+            self.clients[client2]['color'] = colors[1]
+            
+            # Store game information
+            self.games[game_id] = {
+                'white': client1 if colors[0] == 'white' else client2,
+                'black': client2 if colors[0] == 'white' else client1,
+                'game': game
+            }
         
-        # Create a unique game ID
-        game_id = str(random.randint(1000, 9999))
-        
-        # Create a new chess game
-        game = ChessGame()
-        
-        # Randomly assign colors
-        colors = ['white', 'black']
-        random.shuffle(colors)
-        
-        # Update client information
-        self.clients[client1]['game'] = game_id
-        self.clients[client1]['color'] = colors[0]
-        self.clients[client2]['game'] = game_id
-        self.clients[client2]['color'] = colors[1]
-        
-        # Store game information
-        self.games[game_id] = {
-            'white': client1 if colors[0] == 'white' else client2,
-            'black': client2 if colors[0] == 'white' else client1,
-            'game': game
-        }
-        
-        # Notify players
-        self.send_message(client1, {
-            'type': 'game_start',
-            'color': colors[0],
-            'opponent': self.clients[client2]['username']
-        })
-        
-        self.send_message(client2, {
-            'type': 'game_start',
-            'color': colors[1],
-            'opponent': self.clients[client1]['username']
-        })
-        
-        # Send initial board state to both players
-        board_state = game.get_board_state()
-        
-        self.send_message(client1, {
-            'type': 'board_state',
-            'board': board_state,
-            'turn': game.get_current_turn()
-        })
-        
-        self.send_message(client2, {
-            'type': 'board_state',
-            'board': board_state,
-            'turn': game.get_current_turn()
-        })
+        # Outside the lock to avoid potential deadlocks with send_message
+        try:
+            # Send game_start notifications first
+            print(f"Sending game_start to {self.clients[client1]['username']} as {colors[0]}")
+            success1 = self.send_message(client1, {
+                'type': 'game_start',
+                'color': colors[0],
+                'opponent': self.clients[client2]['username']
+            })
+            
+            print(f"Sending game_start to {self.clients[client2]['username']} as {colors[1]}")
+            success2 = self.send_message(client2, {
+                'type': 'game_start',
+                'color': colors[1],
+                'opponent': self.clients[client1]['username']
+            })
+            
+            # If either message failed, clean up the game
+            if not (success1 and success2):
+                print("Failed to send game_start messages. Cleaning up game.")
+                with self.lock:
+                    self.cleanup_game(game_id)
+                return
+            
+            # Small delay to ensure game_start messages are processed first
+            time.sleep(0.1)
+            
+            # Send initial board state to both players
+            board_state = game.get_board_state()
+            
+            print(f"Sending board_state to {self.clients[client1]['username']}")
+            self.send_message(client1, {
+                'type': 'board_state',
+                'board': board_state,
+                'turn': game.get_current_turn()
+            })
+            
+            print(f"Sending board_state to {self.clients[client2]['username']}")
+            self.send_message(client2, {
+                'type': 'board_state',
+                'board': board_state,
+                'turn': game.get_current_turn()
+            })
+            
+            print(f"Game {game_id} successfully started")
+        except Exception as e:
+            print(f"Error during matchmaking: {e}")
+            # Clean up the game if something went wrong
+            with self.lock:
+                self.cleanup_game(game_id)
     
     def handle_move(self, client_socket, from_pos, to_pos):
         with self.lock:
@@ -324,9 +386,11 @@ class ChessServer:
     def send_message(self, client_socket, message):
         try:
             client_socket.send(json.dumps(message).encode('utf-8'))
+            return True
         except:
             # If sending fails, disconnect the client
             self.disconnect_client(client_socket)
+            return False
 
 
 if __name__ == "__main__":
