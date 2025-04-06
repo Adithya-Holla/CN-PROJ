@@ -131,6 +131,19 @@ def handle_client(client_socket, addr):
     opponent_socket = None
     player_color = None
     
+    # Game state tracking
+    move_count = 0
+    start_time = time.time()
+    points = {'white': 0, 'black': 0}
+    piece_values = {
+        'pawn': 1,
+        'knight': 3,
+        'bishop': 3,
+        'rook': 5,
+        'queen': 9,
+        'king': 0  # King has no point value since it can't be captured
+    }
+    
     try:
         print(f"New connection from {addr}")
         client_socket.settimeout(300)  # Set a longer timeout (5 minutes)
@@ -204,15 +217,35 @@ def handle_client(client_socket, addr):
                         from_pos = message.get('from')
                         to_pos = message.get('to')
                         
+                        # Increment move counter
+                        move_count += 1
+                        
+                        # Update points if capturing a piece
+                        # Simplified: In a real implementation, you'd check what piece is at to_pos
+                        # and if it's an opponent's piece, add its value to the player's points
+                        captured_piece_type = message.get('captured_piece')
+                        if captured_piece_type:
+                            points[player_color] += piece_values.get(captured_piece_type, 0)
+                        
                         # Update board state (simplified)
                         board_state = [[None for _ in range(8)] for _ in range(8)]
-                        board_state[0][0] = {'color': 'black', 'type': 'rook', 'has_moved': False}
-                        board_state[0][4] = {'color': 'black', 'type': 'king', 'has_moved': False}
-                        board_state[7][0] = {'color': 'white', 'type': 'rook', 'has_moved': False}
-                        board_state[7][4] = {'color': 'white', 'type': 'king', 'has_moved': False}
+                        board_state[0][0] = {'color': 'black', 'type': 'rook', 'has_moved': False, 'points': 5}
+                        board_state[0][4] = {'color': 'black', 'type': 'king', 'has_moved': False, 'points': 0}
+                        board_state[7][0] = {'color': 'white', 'type': 'rook', 'has_moved': False, 'points': 5}
+                        board_state[7][4] = {'color': 'white', 'type': 'king', 'has_moved': False, 'points': 0}
                         
                         # Determine next player's turn
                         next_turn = 'black' if player_color == 'white' else 'white'
+                        
+                        # Calculate game duration
+                        current_duration = format_duration(time.time() - start_time)
+                        
+                        # Game information
+                        game_info = {
+                            'move_count': move_count,
+                            'duration': current_duration,
+                            'points': points
+                        }
                         
                         # Send move result to current player
                         move_result = {
@@ -220,7 +253,8 @@ def handle_client(client_socket, addr):
                             'valid': True,
                             'board': board_state,
                             'turn': next_turn,
-                            'status': {'game_over': False}
+                            'status': {'game_over': False},
+                            'game_info': game_info
                         }
                         client_socket.send(json.dumps(move_result).encode('utf-8'))
                         
@@ -236,7 +270,8 @@ def handle_client(client_socket, addr):
                                     'to': to_pos,
                                     'board': board_state,
                                     'turn': next_turn,
-                                    'status': {'game_over': False}
+                                    'status': {'game_over': False},
+                                    'game_info': game_info
                                 }
                                 opponent_socket.send(json.dumps(opponent_move).encode('utf-8'))
                                 print(f"Sent move from {username} to {opponent_name}")
@@ -249,11 +284,22 @@ def handle_client(client_socket, addr):
                             if opponent_name in clients:
                                 opponent_socket = clients[opponent_name]['socket']
                                 
+                                # Calculate game duration
+                                current_duration = format_duration(time.time() - start_time)
+                                
+                                # Game information
+                                game_info = {
+                                    'move_count': move_count,
+                                    'duration': current_duration,
+                                    'points': points
+                                }
+                                
                                 # Notify the resigning player
                                 resign_result = {
                                     'type': 'game_over',
                                     'result': 'resignation',
-                                    'winner': 'opponent'
+                                    'winner': 'opponent',
+                                    'game_info': game_info
                                 }
                                 client_socket.send(json.dumps(resign_result).encode('utf-8'))
                                 
@@ -261,7 +307,8 @@ def handle_client(client_socket, addr):
                                 opponent_win = {
                                     'type': 'game_over',
                                     'result': 'opponent_resigned',
-                                    'winner': clients[opponent_name]['color']
+                                    'winner': clients[opponent_name]['color'],
+                                    'game_info': game_info
                                 }
                                 opponent_socket.send(json.dumps(opponent_win).encode('utf-8'))
                                 print(f"{username} resigned, {opponent_name} wins")
@@ -357,6 +404,12 @@ def start_test_server(host='0.0.0.0', port=5555):
         print("Server shutting down...")
     finally:
         server.close()
+
+def format_duration(seconds):
+    """Format seconds into minutes and seconds string"""
+    minutes = int(seconds // 60)
+    secs = int(seconds % 60)
+    return f"{minutes}m {secs}s"
 
 if __name__ == "__main__":
     print("Starting chess server...")

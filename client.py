@@ -72,6 +72,16 @@ class ChessClient:
         self.game_over = False
         self.game_result = None
         
+        # Game tracking
+        self.move_count = 0
+        self.game_duration = "0m 0s"
+        self.points = {"white": 0, "black": 0}  # Track points for each player
+        
+        # Player time tracking (chess clock)
+        self.player_times = {"white": 0, "black": 0}  # Time in seconds for each player
+        self.last_move_time = None  # Timestamp of the last move
+        self.current_turn_color = "white"  # White starts first
+        
         # UI components
         self.board = ChessBoard(self.screen, self.colors)
         self.menu = Menu(self.screen, self.colors, self.font, self.title_font)
@@ -254,6 +264,11 @@ class ChessClient:
             self.opponent_name = message.get('opponent')
             self.in_game = True
             
+            # Reset chess clock
+            self.player_times = {"white": 0, "black": 0}
+            self.last_move_time = time.time()
+            self.current_turn_color = "white"  # Chess always starts with white
+            
             # Update menu status first for visual feedback
             self.menu.set_status(f"Game found! Playing as {self.player_color} vs {self.opponent_name}")
             
@@ -277,7 +292,16 @@ class ChessClient:
             board_data = message.get('board')
             if board_data:
                 self.board.update_board(board_data)
-                self.is_my_turn = message.get('turn') == self.player_color
+                new_turn = message.get('turn')
+                
+                # Update chess clock if turn changed
+                if self.current_turn_color != new_turn and self.last_move_time is not None:
+                    elapsed = time.time() - self.last_move_time
+                    self.player_times[self.current_turn_color] += elapsed
+                    self.last_move_time = time.time()
+                    self.current_turn_color = new_turn
+                
+                self.is_my_turn = new_turn == self.player_color
                 turn = "your" if self.is_my_turn else "opponent's"
                 print(f"Received board state. It's {turn} turn.")
             else:
@@ -292,9 +316,25 @@ class ChessClient:
         elif message_type == 'move_result':
             if message.get('valid'):
                 self.board.update_board(message.get('board'))
-                self.is_my_turn = message.get('turn') == self.player_color
+                new_turn = message.get('turn')
+                
+                # Update chess clock if turn changed
+                if self.current_turn_color != new_turn and self.last_move_time is not None:
+                    elapsed = time.time() - self.last_move_time
+                    self.player_times[self.current_turn_color] += elapsed
+                    self.last_move_time = time.time()
+                    self.current_turn_color = new_turn
+                
+                self.is_my_turn = new_turn == self.player_color
                 self.selected_piece = None
                 self.valid_moves = []
+                
+                # Update game information if available
+                game_info = message.get('game_info', {})
+                if game_info:
+                    self.move_count = game_info.get('move_count', self.move_count)
+                    self.game_duration = game_info.get('duration', self.game_duration)
+                    self.points = game_info.get('points', self.points)
                 
                 status = message.get('status', {})
                 if status.get('game_over'):
@@ -308,8 +348,24 @@ class ChessClient:
             from_pos = message.get('from')
             to_pos = message.get('to')
             self.board.update_board(message.get('board'))
-            self.is_my_turn = message.get('turn') == self.player_color
+            new_turn = message.get('turn')
+            
+            # Update chess clock if turn changed
+            if self.current_turn_color != new_turn and self.last_move_time is not None:
+                elapsed = time.time() - self.last_move_time
+                self.player_times[self.current_turn_color] += elapsed
+                self.last_move_time = time.time()
+                self.current_turn_color = new_turn
+            
+            self.is_my_turn = new_turn == self.player_color
             print(f"Opponent moved from {from_pos} to {to_pos}")
+            
+            # Update game information if available
+            game_info = message.get('game_info', {})
+            if game_info:
+                self.move_count = game_info.get('move_count', self.move_count)
+                self.game_duration = game_info.get('duration', self.game_duration)
+                self.points = game_info.get('points', self.points)
             
             status = message.get('status', {})
             if status.get('game_over'):
@@ -323,7 +379,21 @@ class ChessClient:
                 'result': message.get('result'),
                 'winner': message.get('winner')
             }
-            print(f"Game over: {self.game_result}")
+            
+            # Update final time for the current player
+            if self.last_move_time is not None:
+                elapsed = time.time() - self.last_move_time
+                self.player_times[self.current_turn_color] += elapsed
+                self.last_move_time = None
+            
+            # Update game information if available
+            game_info = message.get('game_info', {})
+            if game_info:
+                self.move_count = game_info.get('move_count', self.move_count)
+                self.game_duration = game_info.get('duration', self.game_duration)
+                self.points = game_info.get('points', self.points)
+            
+            print(f"Game over: {self.game_result}, info: {game_info}")
         
         elif message_type == 'chat':
             sender = message.get('sender')
@@ -494,8 +564,8 @@ class ChessClient:
         return True
     
     def handle_game_ui_click(self, mouse_pos):
-        # Resign button
-        resign_button_rect = pygame.Rect(self.width - 200, self.height - 50, 150, 40)
+        # Update the resign button coordinates to match the new position
+        resign_button_rect = pygame.Rect(self.width - 200, self.height - 100, 150, 40)
         if resign_button_rect.collidepoint(mouse_pos) and not self.game_over:
             self.resign_game()
         
@@ -505,7 +575,7 @@ class ChessClient:
             card_width, card_height = 500, 300
             card_x = self.width // 2 - card_width // 2
             card_y = self.height // 2 - card_height // 2
-            button_rect = pygame.Rect(card_x + card_width // 2 - 100, card_y + card_height - 60, 200, 45)
+            button_rect = pygame.Rect(card_x + card_width // 2 - 100, card_y + card_height - 40, 200, 45)
             
             if button_rect.collidepoint(mouse_pos):
                 self.reset_game()
@@ -539,7 +609,7 @@ class ChessClient:
         
         elif self.current_screen == 'menu':
             print("Drawing menu screen with FIND GAME button")
-            self.menu.draw_menu_screen()
+            self.menu.draw_menu_screen(self.username)
             
             # Draw connection status
             status_text = "Connected" if self.connected else "Disconnected"
@@ -583,7 +653,7 @@ class ChessClient:
                             2)
             
             # Draw player info section
-            player_section_height = 180
+            player_section_height = 240  # Increased height to accommodate more info
             pygame.draw.rect(self.screen, (240, 240, 245), 
                             (self.width - panel_width + 10, 70, panel_width - 20, player_section_height),
                             border_radius=8)
@@ -618,7 +688,25 @@ class ChessClient:
                 draw_text(self.screen, opponent_value, self.font, self.colors['text'], 
                          self.width - panel_width + 150, vertical_position)
                 
-                vertical_position += 30
+                # Draw opponent time
+                opponent_time = self.format_time(self.player_times[opponent_color])
+                if self.current_turn_color == opponent_color and not self.game_over:
+                    opponent_time = self.update_chess_clock()  # Active clock
+                    time_color = self.colors['warning']
+                else:
+                    time_color = self.colors['text']
+                    
+                time_text = f"Time: {opponent_time}"
+                draw_text(self.screen, time_text, self.font, time_color, 
+                         self.width - panel_width + 50, vertical_position + 25)
+                
+                # Draw opponent points
+                opponent_points = self.points.get(opponent_color, 0)
+                points_text = f"Points: {opponent_points}"
+                draw_text(self.screen, points_text, self.font, self.colors['text'], 
+                         self.width - panel_width + 180, vertical_position + 25)
+                
+                vertical_position += 55
             
             # Draw player info with icon
             if self.username and self.player_color:
@@ -638,7 +726,72 @@ class ChessClient:
                 draw_text(self.screen, player_value, self.font, self.colors['text'], 
                          self.width - panel_width + 150, vertical_position)
                 
-                vertical_position += 30
+                # Draw player time
+                player_time = self.format_time(self.player_times[self.player_color])
+                if self.current_turn_color == self.player_color and not self.game_over:
+                    player_time = self.update_chess_clock()  # Active clock
+                    time_color = self.colors['success']
+                else:
+                    time_color = self.colors['text']
+                    
+                time_text = f"Time: {player_time}"
+                draw_text(self.screen, time_text, self.font, time_color, 
+                         self.width - panel_width + 50, vertical_position + 25)
+                
+                # Draw player points
+                player_points = self.points.get(self.player_color, 0)
+                points_text = f"Points: {player_points}"
+                draw_text(self.screen, points_text, self.font, self.colors['text'], 
+                         self.width - panel_width + 180, vertical_position + 25)
+                
+                vertical_position += 55
+            
+            # Draw game stats in a separate row
+            pygame.draw.line(self.screen, self.colors['panel'],
+                           (self.width - panel_width + 20, vertical_position),
+                           (self.width - panel_width + panel_width - 30, vertical_position),
+                           1)
+            
+            vertical_position += 15
+            
+            # Draw move count
+            moves_text = f"Moves: {self.move_count}"
+            draw_text(self.screen, moves_text, self.font, self.colors['text'], 
+                     self.width - panel_width + 50, vertical_position)
+            
+            # Update this line: Draw separate timers instead of total game time
+            time_label = "Timers:"
+            draw_text(self.screen, time_label, self.font, self.colors['text'], 
+                     self.width - panel_width + 180, vertical_position)
+            
+            # Add separate timer display
+            vertical_position += 25
+            
+            # White timer
+            white_time = self.format_time(self.player_times["white"])
+            if self.current_turn_color == "white" and not self.game_over:
+                white_time = self.update_chess_clock()
+                time_color = self.colors['warning'] if self.player_color != "white" else self.colors['success']
+            else:
+                time_color = self.colors['text']
+            
+            white_time_text = f"White: {white_time}"
+            draw_text(self.screen, white_time_text, self.font, time_color, 
+                     self.width - panel_width + 70, vertical_position)
+            
+            # Black timer
+            black_time = self.format_time(self.player_times["black"])
+            if self.current_turn_color == "black" and not self.game_over:
+                black_time = self.update_chess_clock()
+                time_color = self.colors['warning'] if self.player_color != "black" else self.colors['success']
+            else:
+                time_color = self.colors['text']
+            
+            black_time_text = f"Black: {black_time}"
+            draw_text(self.screen, black_time_text, self.font, time_color, 
+                     self.width - panel_width + 180, vertical_position)
+            
+            vertical_position += 30
             
             # Draw turn indicator with visual cue
             turn_label = "Turn:"
@@ -662,9 +815,9 @@ class ChessClient:
             pygame.draw.circle(self.screen, turn_color, 
                              (self.width - panel_width + 30, vertical_position + 7), int(indicator_radius))
             
-            # Draw chat panel with better styling
+            # Draw chat panel with better styling - REDUCED HEIGHT
             chat_y_pos = player_section_height + 90
-            chat_height = self.height - chat_y_pos - 60
+            chat_height = self.height - chat_y_pos - 110  # Reduced height to move controls up
             
             # Chat header
             chat_header = "Chat"
@@ -687,8 +840,8 @@ class ChessClient:
             
             self.screen.blit(status_surface, status_rect)
             
-            # Draw resign button with better styling
-            resign_button_rect = pygame.Rect(self.width - 200, self.height - 50, 150, 40)
+            # Draw resign button with better styling - MOVED UP
+            resign_button_rect = pygame.Rect(self.width - 200, self.height - 100, 150, 40)
             
             # Button shadow
             pygame.draw.rect(self.screen, (150, 150, 150), 
@@ -807,33 +960,34 @@ class ChessClient:
                        (card_x + card_width - 50, stats_y - 10),
                        1)
         
-        # Draw some fake stats to make it look nice
+        # Use real game stats
         stats_font = pygame.font.SysFont('Arial', 16)
         
-        if winner == self.player_color or result == 'opponent_resigned' or result == 'opponent_disconnected':
-            stats_text1 = "Moves played: 24"
-            stats_text2 = "Game duration: 7m 45s"
-            stats_text3 = "Your rating: +15"
-        elif winner != self.player_color and (result == 'checkmate' or result == 'resignation'):
-            stats_text1 = "Moves played: 31"
-            stats_text2 = "Game duration: 10m 12s"
-            stats_text3 = "Your rating: -12"
-        else:
-            stats_text1 = "Moves played: 42"
-            stats_text2 = "Game duration: 15m 30s"
-            stats_text3 = "Your rating: +2"
-            
+        # Determine player points and times
+        player_points = self.points.get(self.player_color, 0)
+        opponent_points = self.points.get('white' if self.player_color == 'black' else 'black', 0)
+        
+        player_time = self.format_time(self.player_times[self.player_color])
+        opponent_time = self.format_time(self.player_times['white' if self.player_color == 'black' else 'black'])
+        
+        # Format the stats texts with real values
+        stats_text1 = f"Moves played: {self.move_count}"
+        
+        # Remove White/Black time stats and keep only player vs opponent stats
+        stats_text2 = f"Your points: {player_points} (Opponent: {opponent_points})"
+        stats_text3 = f"Your time: {player_time} (Opponent: {opponent_time})"
+        
         # Draw stats
         stats_surface1 = stats_font.render(stats_text1, True, self.colors['text'])
         stats_surface2 = stats_font.render(stats_text2, True, self.colors['text'])
         stats_surface3 = stats_font.render(stats_text3, True, self.colors['text'])
         
-        self.screen.blit(stats_surface1, (card_x + card_width // 2 - 100, stats_y + 5))
-        self.screen.blit(stats_surface2, (card_x + card_width // 2 - 100, stats_y + 30))
-        self.screen.blit(stats_surface3, (card_x + card_width // 2 - 100, stats_y + 55))
+        self.screen.blit(stats_surface1, (card_x + card_width // 2 - 140, stats_y + 5))
+        self.screen.blit(stats_surface2, (card_x + card_width // 2 - 140, stats_y + 35))
+        self.screen.blit(stats_surface3, (card_x + card_width // 2 - 140, stats_y + 65))
         
-        # Draw button to return to menu
-        button_rect = pygame.Rect(card_x + card_width // 2 - 100, card_y + card_height - 60, 200, 45)
+        # Draw button to return to menu - MOVED LOWER
+        button_rect = pygame.Rect(card_x + card_width // 2 - 100, card_y + card_height - 40, 200, 45)
         
         # Button shadow
         pygame.draw.rect(self.screen, (150, 150, 150), 
@@ -848,6 +1002,51 @@ class ChessClient:
         button_surface = self.font.render(button_text, True, self.colors['white'])
         button_rect_text = button_surface.get_rect(center=button_rect.center)
         self.screen.blit(button_surface, button_rect_text)
+    
+    def update_chess_clock(self):
+        """Update the active player's chess clock"""
+        if self.in_game and not self.game_over and self.last_move_time is not None:
+            current_time = time.time()
+            elapsed = current_time - self.last_move_time
+            # Only update the displayed time, don't add to the accumulated time yet
+            # (that happens when the turn changes)
+            current_time_secs = self.player_times[self.current_turn_color] + elapsed
+            
+            minutes = int(current_time_secs // 60)
+            seconds = int(current_time_secs % 60)
+            return f"{minutes:02d}:{seconds:02d}"
+        return "00:00"
+
+    def format_time(self, seconds):
+        """Format seconds into minutes:seconds display"""
+        minutes = int(seconds // 60)
+        secs = int(seconds % 60)
+        return f"{minutes:02d}:{secs:02d}"
+
+    def get_total_game_time(self):
+        """Get both players' times separately instead of combining them"""
+        white_time = self.player_times["white"]
+        black_time = self.player_times["black"]
+        
+        # If a player is currently moving, add the elapsed time to their counter
+        if self.last_move_time is not None:
+            elapsed = time.time() - self.last_move_time
+            if self.current_turn_color == "white":
+                white_time += elapsed
+            else:
+                black_time += elapsed
+        
+        # Format both times
+        white_minutes = int(white_time // 60)
+        white_seconds = int(white_time % 60)
+        black_minutes = int(black_time // 60)
+        black_seconds = int(black_time % 60)
+        
+        white_formatted = f"{white_minutes}m {white_seconds}s"
+        black_formatted = f"{black_minutes}m {black_seconds}s"
+        
+        # Return formatted times for both players
+        return f"White: {white_formatted} | Black: {black_formatted}"
     
     def run(self):
         clock = pygame.time.Clock()

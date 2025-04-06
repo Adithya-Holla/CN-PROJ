@@ -231,12 +231,23 @@ class ChessServer:
                 board_state = game.get_board_state()
                 game_status = game.get_game_status()
                 
+                # Additional game information
+                game_info = {
+                    'move_count': game.get_move_count(),
+                    'duration': game.get_formatted_duration(),
+                    'points': {
+                        'white': game.get_points('white'),
+                        'black': game.get_points('black')
+                    }
+                }
+                
                 self.send_message(client_socket, {
                     'type': 'move_result',
                     'valid': True,
                     'board': board_state,
                     'turn': game.get_current_turn(),
-                    'status': game_status
+                    'status': game_status,
+                    'game_info': game_info
                 })
                 
                 self.send_message(opponent, {
@@ -245,12 +256,13 @@ class ChessServer:
                     'to': to_pos,
                     'board': board_state,
                     'turn': game.get_current_turn(),
-                    'status': game_status
+                    'status': game_status,
+                    'game_info': game_info
                 })
                 
                 # Check if game is over
                 if game_status['game_over']:
-                    self.handle_game_over(game_id, game_status)
+                    self.handle_game_over(game_id, game_status, game_info)
             else:
                 # Invalid move
                 self.send_message(client_socket, {
@@ -266,42 +278,57 @@ class ChessServer:
             if game_id is None:
                 return
             
+            game = self.games[game_id]['game']
             player_color = self.clients[client_socket]['color']
             winner_color = 'black' if player_color == 'white' else 'white'
             
             # Get opponent socket
             opponent = self.games[game_id]['white'] if player_color == 'black' else self.games[game_id]['black']
             
+            # Additional game information
+            game_info = {
+                'move_count': game.get_move_count(),
+                'duration': game.get_formatted_duration(),
+                'points': {
+                    'white': game.get_points('white'),
+                    'black': game.get_points('black')
+                }
+            }
+            
             # Notify both players
             self.send_message(client_socket, {
                 'type': 'game_over',
                 'result': 'resignation',
-                'winner': winner_color
+                'winner': winner_color,
+                'game_info': game_info
             })
             
             self.send_message(opponent, {
                 'type': 'game_over',
                 'result': 'opponent_resigned',
-                'winner': winner_color
+                'winner': winner_color,
+                'game_info': game_info
             })
             
             # Clean up game
             self.cleanup_game(game_id)
     
-    def handle_game_over(self, game_id, status):
+    def handle_game_over(self, game_id, status, game_info):
         white_client = self.games[game_id]['white']
         black_client = self.games[game_id]['black']
         
         self.send_message(white_client, {
             'type': 'game_over',
             'result': status['result'],
-            'winner': status['winner']
+            'winner': status['winner'],
+            'game_info': game_info
         })
         
         self.send_message(black_client, {
             'type': 'game_over',
             'result': status['result'],
-            'winner': status['winner']
+            'winner': status['winner'],
+            'game_info': game_info
         })
         
         # Clean up game

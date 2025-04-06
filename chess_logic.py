@@ -1,8 +1,20 @@
+import time
+
 class Piece:
     def __init__(self, color, piece_type):
         self.color = color  # 'white' or 'black'
         self.type = piece_type  # 'pawn', 'rook', 'knight', 'bishop', 'queen', 'king'
         self.has_moved = False
+        
+        # Standard chess piece point values
+        self.point_values = {
+            'pawn': 1,
+            'knight': 3,
+            'bishop': 3,
+            'rook': 5,
+            'queen': 9,
+            'king': 0  # King has no point value since it can't be captured
+        }
     
     def __str__(self):
         return f"{self.color[0]}{self.type[0]}"
@@ -11,8 +23,12 @@ class Piece:
         return {
             'color': self.color,
             'type': self.type,
-            'has_moved': self.has_moved
+            'has_moved': self.has_moved,
+            'points': self.point_values.get(self.type, 0)
         }
+    
+    def get_point_value(self):
+        return self.point_values.get(self.type, 0)
 
 
 class ChessGame:
@@ -26,6 +42,16 @@ class ChessGame:
         self.winner = None
         self.check = {'white': False, 'black': False}
         self.en_passant_target = None
+        
+        # Add game start time
+        self.start_time = time.time()
+        self.end_time = None
+        
+        # Track points for each player (from captured pieces)
+        self.points = {'white': 0, 'black': 0}
+        
+        # Track total number of moves
+        self.move_count = 0
     
     def initialize_board(self):
         # Initialize an 8x8 empty board
@@ -133,6 +159,8 @@ class ChessGame:
         # Record capture if there was one
         if captured_piece:
             self.captured_pieces[self.current_turn].append(captured_piece)
+            # Add points for the capture
+            self.points[self.current_turn] += captured_piece.get_point_value()
         
         # Move the piece
         self.board[to_row][to_col] = piece
@@ -164,6 +192,9 @@ class ChessGame:
         
         # Mark piece as moved
         piece.has_moved = True
+        
+        # Increment move counter
+        self.move_count += 1
         
         # Record the move
         self.move_history.append({
@@ -200,6 +231,10 @@ class ChessGame:
             self.game_over = True
             self.result = 'threefold_repetition'
             self.winner = None
+        
+        # If game is over, record end time
+        if self.game_over:
+            self.end_time = time.time()
         
         return {'valid': True}
     
@@ -606,4 +641,24 @@ class ChessGame:
         col_letter = chr(ord('a') + col)
         row_number = 8 - row
         
-        return f"{col_letter}{row_number}" 
+        return f"{col_letter}{row_number}"
+    
+    def get_game_duration(self):
+        """Get the game duration in seconds."""
+        end = self.end_time if self.end_time else time.time()
+        return end - self.start_time
+    
+    def get_formatted_duration(self):
+        """Get the game duration formatted as minutes and seconds."""
+        duration = self.get_game_duration()
+        minutes = int(duration // 60)
+        seconds = int(duration % 60)
+        return f"{minutes}m {seconds}s"
+    
+    def get_move_count(self):
+        """Get the total number of moves in the game."""
+        return self.move_count
+    
+    def get_points(self, color):
+        """Get points for a specific color."""
+        return self.points.get(color, 0) 

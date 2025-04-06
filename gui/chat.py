@@ -33,8 +33,11 @@ class ChatPanel:
         pygame.draw.rect(self.screen, (240, 240, 245), self.panel_rect, border_radius=8)
         pygame.draw.rect(self.screen, self.colors['panel'], self.panel_rect, 1, border_radius=8)
         
+        # Calculate text input position - MOVED UP by 20 pixels
+        input_y_position = y + self.height - 60  # Changed from -40 to -60
+        
         # Draw messages
-        message_area_height = self.height - 50  # Leave space for input box
+        message_area_height = self.height - 70  # Leave more space for input box - changed from -50 to -70
         visible_messages = min(len(self.messages), int(message_area_height / self.message_height))
         start_idx = max(0, len(self.messages) - visible_messages)
         
@@ -94,32 +97,45 @@ class ChatPanel:
                     text_rect = text_surface.get_rect(midleft=(bubble_rect.left + 10, bubble_rect.centery))
                     self.screen.blit(text_surface, text_rect)
         
-        # Draw bottom message divider
+        # Draw bottom message divider - MOVED UP by 20 pixels
         pygame.draw.line(
             self.screen,
             self.colors['panel'],
-            (x + 5, y + self.height - 45),
-            (x + self.panel_rect.width - 5, y + self.height - 45),
+            (x + 5, input_y_position - 5),  # Changed from y + self.height - 45
+            (x + self.panel_rect.width - 5, input_y_position - 5),
             1
         )
         
-        # Position and draw chat input box with rounded edges
+        # Position and draw chat input box with rounded edges - MOVED UP by 20 pixels
         self.chat_box.rect.x = x + 5
-        self.chat_box.rect.y = y + self.height - 40
+        self.chat_box.rect.y = input_y_position  # Changed from y + self.height - 40
         self.chat_box.rect.width = self.panel_rect.width - 60
         self.chat_box.update(pygame.time.get_ticks())
         self.chat_box.draw(self.screen)
         
-        # Draw send button with better styling
+        # Draw send button with better styling - MOVED UP by 20 pixels
         send_button_rect = pygame.Rect(
             x + self.panel_rect.width - 50,
-            y + self.height - 40,
+            input_y_position,  # Changed from y + self.height - 40
             45,
             30
         )
         
+        # Button shadow for better 3D effect
+        pygame.draw.rect(self.screen, (150, 150, 150), 
+                        (send_button_rect.x + 2, send_button_rect.y + 2, 
+                        send_button_rect.width, send_button_rect.height),
+                        border_radius=5)
+        
         # Button background
         pygame.draw.rect(self.screen, self.colors['button'], send_button_rect, border_radius=5)
+        
+        # Button hover effect
+        mouse_pos = pygame.mouse.get_pos()
+        if send_button_rect.collidepoint(mouse_pos):
+            # Draw a highlight effect when mouse is over the button
+            pygame.draw.rect(self.screen, self.colors.get('button_hover', (122, 161, 226)), 
+                            send_button_rect, border_radius=5)
         
         # Button text
         send_text = "Send"
@@ -128,11 +144,15 @@ class ChatPanel:
         self.screen.blit(send_text_surface, send_text_rect)
     
     def handle_click(self, mouse_pos):
-        # Check if send button was clicked
+        # Check if send button was clicked - Adjust coordinates for the moved button
         if hasattr(self, 'panel_rect') and self.panel_rect:
+            # Calculate the correct button rect position based on where it's drawn
             send_button_rect = pygame.Rect(
                 self.panel_rect.right - 50,
-                self.panel_rect.bottom - 40,
+                # This is where the issue is - it doesn't match the drawing position
+                # Original: self.panel_rect.bottom - 60
+                # Fix: Calculate based on panel height and input_y_position that's used in draw()
+                self.panel_rect.y + self.height - 60,
                 45,
                 30
             )

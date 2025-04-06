@@ -1,5 +1,6 @@
 import pygame
 import time
+import math
 from gui.utils import Button, TextBox, draw_text
 
 class Menu:
@@ -39,7 +40,7 @@ class Menu:
         # Menu screen elements - make the button bigger and more prominent
         self.find_game_button = Button(
             (self.width // 2 - 150, self.height // 2 - 40, 300, 80),
-            "FIND GAME",
+            "FIND MATCH",
             title_font,
             {
                 'normal': (50, 200, 50),    # Brighter green for normal state
@@ -48,6 +49,7 @@ class Menu:
             }
         )
         
+        # Status and game tracking
         self.status_message = ""
         self.find_game_clicked = False
     
@@ -141,9 +143,10 @@ class Menu:
         footer_surface = pygame.font.SysFont('Arial', 14).render(footer_text, True, self.colors['text'])
         self.screen.blit(footer_surface, (self.width - footer_surface.get_width() - 10, self.height - 30))
     
-    def draw_menu_screen(self):
-        # Draw header bar
-        pygame.draw.rect(self.screen, self.colors['header'], (0, 0, self.width, 80))
+    def draw_menu_screen(self, username=None):
+        # Draw header bar with gradient effect
+        header_rect = pygame.Rect(0, 0, self.width, 80)
+        pygame.draw.rect(self.screen, self.colors['header'], header_rect)
         
         # Draw title with shadow effect
         title_text = "CHESS ONLINE"
@@ -156,63 +159,90 @@ class Menu:
         title_rect = title_surface.get_rect(center=(self.width // 2, 40))
         self.screen.blit(title_surface, title_rect)
         
-        # Draw connection status indicator at top-right
+        # Draw connection status indicator at top-right with improved styling
         status_text = "Connected to Server"
         status_surface = self.font.render(status_text, True, self.colors['success'])
-        status_rect = status_surface.get_rect(center=(self.width - 120, 40))
+        status_rect = status_surface.get_rect(midright=(self.width - 20, 40))
         
-        # Status indicator circle
-        pygame.draw.circle(self.screen, self.colors['success'], (self.width - 220, 40), 8)
+        # Status indicator circle with pulse effect
+        pulse_size = 6 + (math.sin(pygame.time.get_ticks() / 500) + 1)
+        pygame.draw.circle(self.screen, self.colors['success'], (status_rect.left - 15, status_rect.centery), pulse_size)
         
         self.screen.blit(status_surface, status_rect)
         
-        # Draw main menu card
-        card_width, card_height = 500, 350
+        # Draw main menu card with improved styling - SIMPLIFIED VERSION
+        card_width, card_height = 500, 300
         card_x = self.width // 2 - card_width // 2
-        card_y = self.height // 2 - card_height // 2 + 20
+        card_y = self.height // 2 - card_height // 2
         
         # Card shadow
-        pygame.draw.rect(self.screen, (200, 200, 200), 
-                         (card_x + 5, card_y + 5, card_width, card_height), 
-                         border_radius=10)
+        pygame.draw.rect(self.screen, (180, 180, 180), 
+                         (card_x + 8, card_y + 8, card_width, card_height), 
+                         border_radius=15)
         
-        # Card background
-        pygame.draw.rect(self.screen, self.colors['white'], 
+        # Card background with subtle gradient
+        pygame.draw.rect(self.screen, (250, 250, 255), 
                          (card_x, card_y, card_width, card_height), 
-                         border_radius=10)
+                         border_radius=15)
         
         # Card border
         pygame.draw.rect(self.screen, self.colors['panel'], 
                          (card_x, card_y, card_width, card_height), 
-                         2, border_radius=10)
+                         2, border_radius=15)
         
-        # Card title
+        # Card title with better styling
         card_title = "Game Lobby"
-        card_title_surface = pygame.font.SysFont('Arial', 28).render(card_title, True, self.colors['header'])
-        card_title_rect = card_title_surface.get_rect(center=(self.width // 2, card_y + 30))
+        card_title_font = pygame.font.SysFont('Arial', 32, bold=True)
+        card_title_surface = card_title_font.render(card_title, True, self.colors['header'])
+        card_title_rect = card_title_surface.get_rect(midtop=(self.width // 2, card_y + 20))
         self.screen.blit(card_title_surface, card_title_rect)
         
-        # Card subtitle
-        subtitle_text = "Click below to find an opponent"
-        subtitle_surface = self.font.render(subtitle_text, True, self.colors['text'])
-        subtitle_rect = subtitle_surface.get_rect(center=(self.width // 2, card_y + 70))
-        self.screen.blit(subtitle_surface, subtitle_rect)
+        # Divider line below title
+        pygame.draw.line(self.screen, self.colors['panel'],
+                        (card_x + 50, card_y + 60),
+                        (card_x + card_width - 50, card_y + 60),
+                        1)
         
-        # Reposition find game button
-        self.find_game_button.rect.x = self.width // 2 - 175
-        self.find_game_button.rect.y = card_y + 120 
-        self.find_game_button.rect.width = 350
-        self.find_game_button.rect.height = 100
+        # Welcome message with player name
+        player_name = username or "Guest Player"
+        welcome_text = f"Welcome, {player_name}!"
+        welcome_surface = pygame.font.SysFont('Arial', 22).render(welcome_text, True, self.colors['text'])
+        welcome_rect = welcome_surface.get_rect(center=(card_x + card_width // 2, card_y + 100))
+        self.screen.blit(welcome_surface, welcome_rect)
         
-        # Recenter the button text
+        # Instructions
+        instruction_text = "Ready to play? Click the button below to find an opponent"
+        instruction_surface = pygame.font.SysFont('Arial', 16).render(instruction_text, True, self.colors['text'])
+        instruction_rect = instruction_surface.get_rect(center=(card_x + card_width // 2, card_y + 130))
+        self.screen.blit(instruction_surface, instruction_rect)
+        
+        # Reposition and resize find game button to be more prominent
+        self.find_game_button.rect.x = card_x + 100
+        self.find_game_button.rect.y = card_y + 170
+        self.find_game_button.rect.width = 300
+        self.find_game_button.rect.height = 70
+        
+        # Update button text
+        self.find_game_button.text = "FIND MATCH"
+        self.find_game_button.text_surface = self.title_font.render(self.find_game_button.text, True, self.colors['white'])
         self.find_game_button.text_rect = self.find_game_button.text_surface.get_rect(center=self.find_game_button.rect.center)
         
-        # Draw find game button
+        # Draw find game button with improved styling
         mouse_pos = pygame.mouse.get_pos()
         self.find_game_button.update(mouse_pos)
+        
+        # Add button shadow for 3D effect
+        shadow_rect = pygame.Rect(
+            self.find_game_button.rect.x + 3,
+            self.find_game_button.rect.y + 3,
+            self.find_game_button.rect.width,
+            self.find_game_button.rect.height
+        )
+        pygame.draw.rect(self.screen, (30, 150, 30), shadow_rect, border_radius=10)
+        
         self.find_game_button.draw(self.screen)
         
-        # Draw status message if any
+        # Draw status message with better styling
         if self.status_message:
             # Choose color based on message content
             if "Finding" in self.status_message or "Looking" in self.status_message:
@@ -220,37 +250,44 @@ class Menu:
                 # Draw animated waiting dots
                 dots = "." * (int(pygame.time.get_ticks() / 500) % 4)
                 self.status_message = self.status_message.rstrip('.') + dots
+                
+                # Draw animated searching graphic
+                center_x = card_x + card_width // 2
+                center_y = card_y + 250
+                radius = 15
+                angle = (pygame.time.get_ticks() / 200) % (2 * 3.14159)
+                x = center_x + radius * math.cos(angle)
+                y = center_y + radius * math.sin(angle)
+                
+                pygame.draw.circle(self.screen, self.colors['warning'], (center_x, center_y), radius, 1)
+                pygame.draw.circle(self.screen, self.colors['warning'], (int(x), int(y)), 5)
+                
             elif "Found" in self.status_message:
                 msg_color = self.colors['success']
             elif "Error" in self.status_message or "Failed" in self.status_message:
                 msg_color = self.colors['error']
             else:
                 msg_color = self.colors['text']
-                
+            
+            # Draw status message with background
+            status_bg = pygame.Rect(card_x + 50, card_y + 260, card_width - 100, 30)
+            pygame.draw.rect(self.screen, (230, 230, 235), status_bg, border_radius=5)
+            pygame.draw.rect(self.screen, self.colors['panel'], status_bg, 1, border_radius=5)
+            
             status_surface = self.font.render(self.status_message, True, msg_color)
-            status_rect = status_surface.get_rect(center=(self.width // 2, card_y + 250))
+            status_rect = status_surface.get_rect(center=status_bg.center)
             self.screen.blit(status_surface, status_rect)
         
-        # Additional instructions
-        if not self.find_game_clicked:
-            # Draw box with game instructions
-            pygame.draw.rect(self.screen, (245, 245, 245), 
-                             (card_x + 75, card_y + 250, 350, 70), 
-                             border_radius=5)
-            pygame.draw.rect(self.screen, self.colors['panel'], 
-                             (card_x + 75, card_y + 250, 350, 70), 
-                             1, border_radius=5)
-            
-            help_text1 = "Ready to play? Click the button to start matchmaking"
-            help_text2 = "You'll be paired with another player automatically"
-            help_surface1 = pygame.font.SysFont('Arial', 16).render(help_text1, True, self.colors['text'])
-            help_surface2 = pygame.font.SysFont('Arial', 16).render(help_text2, True, self.colors['text'])
-            
-            self.screen.blit(help_surface1, (card_x + 85, card_y + 260))
-            self.screen.blit(help_surface2, (card_x + 85, card_y + 290))
-        
         # Footer
-        pygame.draw.rect(self.screen, self.colors['panel'], (0, self.height - 40, self.width, 40))
+        footer_rect = pygame.Rect(0, self.height - 40, self.width, 40)
+        pygame.draw.rect(self.screen, self.colors['panel'], footer_rect)
+        
+        # Left side - version info
+        version_text = "Version 1.0.0"
+        version_surface = pygame.font.SysFont('Arial', 14).render(version_text, True, self.colors['text'])
+        self.screen.blit(version_surface, (10, self.height - 30))
+        
+        # Right side - copyright
         footer_text = "© 2023 Chess Online"
         footer_surface = pygame.font.SysFont('Arial', 14).render(footer_text, True, self.colors['text'])
         self.screen.blit(footer_surface, (self.width - footer_surface.get_width() - 10, self.height - 30))
@@ -296,6 +333,11 @@ class Menu:
         hover_changed = self.find_game_button.update(mouse_pos)
         print(f"Button hover state: {self.find_game_button.hover}")
         
+        # Get card dimensions for hit testing
+        card_width, card_height = 500, 300
+        card_x = self.width // 2 - card_width // 2
+        card_y = self.height // 2 - card_height // 2
+        
         # Check if find game button was clicked - use the Button's is_clicked method
         if self.find_game_button.is_clicked(mouse_pos):
             print("Find Game button clicked!")
@@ -306,8 +348,11 @@ class Menu:
                 print("Find game request sent successfully")
             else:
                 print("Failed to send find game request")
+            return True
         else:
             print("Click was not on the Find Game button")
+            
+        return False
     
     def handle_login_key(self, event):
         # Handle textbox input
